@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Survey Timeline Generator</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #1a1a1a; font-size: 15px; background: #fff; }
+    .inner { max-width: 480px; margin: 0 auto; padding: 2rem 1.5rem 1.5rem; }
+
+    .progress-wrap { max-width: 480px; margin: 0 auto; padding: 1.25rem 1.5rem 0; }
+    .progress-track { height: 3px; background: #e5e5e5; border-radius: 2px; }
+    .progress-fill { height: 3px; background: #178AF0; border-radius: 2px; transition: width 0.4s ease; }
+    .progress-label { font-size: 11px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: #999; margin-top: 6px; }
+
+    .screen { display: none; }
+    .screen.active { display: block; animation: slideIn 0.25s ease; }
+    @keyframes slideIn { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: translateX(0); } }
+    .screen.back-anim { animation: slideInBack 0.25s ease; }
+    @keyframes slideInBack { from { opacity: 0; transform: translateX(-18px); } to { opacity: 1; transform: translateX(0); } }
+
+    h2 { font-size: 22px; font-weight: 500; margin-bottom: 0.3rem; margin-top: 1.5rem; }
+    .sub { font-size: 14px; color: #666; margin-bottom: 1.5rem; line-height: 1.6; }
+
+    .choice-grid, .dir-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 1.75rem; }
+    .choice-card, .dir-card { background: #fff; border: 0.5px solid #ddd; border-radius: 12px; padding: 1rem; cursor: pointer; transition: background 0.12s; }
+    .choice-card:hover, .dir-card:hover { background: #f7f7f7; }
+    .choice-card.selected, .dir-card.selected { border: 2px solid #178AF0; background: #E6F1FB; }
+    .choice-icon, .dir-arrow { font-size: 18px; margin-bottom: 8px; color: #888; }
+    .choice-card.selected .choice-icon, .dir-card.selected .dir-arrow { color: #185FA5; }
+    .choice-label, .dir-label { font-weight: 500; font-size: 14px; margin-bottom: 3px; }
+    .choice-card.selected .choice-label, .dir-card.selected .dir-label { color: #185FA5; }
+    .choice-desc, .dir-desc { font-size: 12px; color: #888; line-height: 1.5; }
+
+    .field-label { font-size: 12px; font-weight: 500; color: #666; margin-bottom: 5px; }
+    input[type=date], input[type=text], input[type=number] {
+      font-size: 14px; font-family: inherit; padding: 7px 10px;
+      border: 0.5px solid #ccc; border-radius: 8px; background: #fff; color: #1a1a1a;
+      outline: none;
+    }
+    input[type=date]:focus, input[type=text]:focus, input[type=number]:focus { border-color: #178AF0; }
+    input[type=date] { width: 190px; }
+    .project-input { width: 100%; margin-bottom: 1.5rem; }
+
+    .phase-col-labels { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; padding: 0 2px; }
+    .phase-col-labels span { font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.06em; }
+    .phase-list { display: flex; flex-direction: column; gap: 0; margin-bottom: 1rem; }
+    .phase-item { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 0.5px solid #eee; }
+    .phase-item:last-child { border-bottom: none; }
+    .drag-handle { color: #bbb; cursor: grab; font-size: 13px; user-select: none; padding: 0 2px; }
+    .phase-item input[type=text] { flex: 1; }
+    .phase-item input[type=number] { width: 58px; text-align: center; }
+    .lock-btn { background: none; border: 0.5px solid #ddd; border-radius: 4px; cursor: pointer; font-size: 12px; padding: 3px 6px; color: #999; }
+    .lock-btn.locked { background: #E6F1FB; border-color: #178AF0; color: #185FA5; }
+    .remove-btn { background: none; border: none; cursor: pointer; color: #bbb; font-size: 16px; padding: 0 4px; line-height: 1; }
+    .remove-btn:hover { color: #c0392b; }
+
+    .sliders { display: flex; flex-direction: column; }
+    .slider-row { display: flex; align-items: center; gap: 12px; padding: 0.75rem 0; border-bottom: 0.5px solid #eee; }
+    .slider-row:last-child { border-bottom: none; }
+    .slider-name { font-size: 14px; flex: 1; }
+    .slider-locked-badge { font-size: 11px; color: #185FA5; background: #E6F1FB; border-radius: 4px; padding: 2px 6px; margin-left: 4px; }
+    .slider-row input[type=range] { width: 110px; flex-shrink: 0; }
+    .slider-val { font-size: 14px; font-weight: 500; min-width: 22px; text-align: right; }
+    .slider-unit { font-size: 12px; color: #999; }
+
+    .buffer-row { display: flex; align-items: center; gap: 12px; padding: 0.75rem 0 0; margin-top: 0.5rem; border-top: 0.5px solid #eee; }
+    .buffer-label { font-size: 13px; color: #666; flex: 1; }
+
+    textarea.paste-area { width: 100%; height: 130px; font-size: 13px; font-family: monospace; padding: 10px; border: 0.5px solid #ddd; border-radius: 8px; background: #fff; color: #1a1a1a; resize: vertical; margin-bottom: 8px; outline: none; }
+    .success-msg { font-size: 13px; color: #2e7d32; margin-top: 6px; display: none; }
+    .error-msg { font-size: 13px; color: #c0392b; margin-top: 6px; display: none; }
+
+    .btn-row { display: flex; gap: 8px; align-items: center; margin-top: 1.5rem; }
+    .btn-row.nav { justify-content: space-between; }
+    .btn {
+      display: inline-flex; align-items: center; padding: 9px 20px;
+      border: 0.5px solid #ccc; border-radius: 8px; background: #fff;
+      cursor: pointer; font-size: 14px; font-weight: 500; color: #1a1a1a;
+      font-family: inherit;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.6);
+      transition: box-shadow 0.12s, transform 0.1s;
+    }
+    .btn:hover { box-shadow: 0 2px 6px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.6); }
+    .btn:active { transform: scale(0.98); }
+    .btn.primary { background: #1a1a1a; color: #fff; border-color: transparent; box-shadow: 0 1px 3px rgba(0,0,0,0.18); }
+    .btn.primary:hover { box-shadow: 0 2px 6px rgba(0,0,0,0.28); }
+    .btn.ghost { background: #f5f5f5; border-color: #e5e5e5; color: #666; }
+    .btn.ghost:hover { color: #1a1a1a; }
+    .btn.small { font-size: 13px; padding: 5px 12px; }
+
+    .tl-badge { font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 20px; background: #f5f5f5; color: #666; border: 0.5px solid #ddd; }
+    .toast { font-size: 12px; color: #2e7d32; display: none; }
+    .tl-table { width: 100%; border-collapse: collapse; border: 0.5px solid #ddd; border-radius: 8px; overflow: hidden; margin-top: 1rem; }
+    .tl-table th { background: #f5f5f5; font-size: 12px; font-weight: 500; color: #666; padding: 7px 12px; text-align: left; border-bottom: 0.5px solid #ddd; }
+    .tl-table th:last-child { text-align: right; }
+    .tl-table td { padding: 8px 12px; font-size: 14px; border-top: 0.5px solid #eee; color: #1a1a1a; vertical-align: top; }
+    .tl-table td.date-col { text-align: right; color: #666; font-weight: 500; white-space: nowrap; }
+    .note-input { width: 100%; font-size: 12px; color: #999; border: none; background: transparent; outline: none; margin-top: 3px; font-family: inherit; }
+    .note-input::placeholder { color: #bbb; }
+    .same-date-warn { font-size: 12px; color: #854F0B; background: #FAEEDA; border: 0.5px solid #EF9F27; border-radius: 8px; padding: 8px 12px; margin-top: 8px; display: none; }
+    .past-warning { display: none; margin-top: 1rem; padding: 10px 14px; background: #FAECE7; border: 0.5px solid #F0997B; border-radius: 8px; font-size: 13px; color: #993C1D; line-height: 1.6; }
+
+    .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+    .stat { background: #f5f5f5; border-radius: 6px; padding: 8px 12px; }
+    .stat-label { font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 2px; }
+    .stat-val { font-size: 15px; font-weight: 500; }
+  </style>
+</head>
+<body>
+
+<div class="progress-wrap" id="prog-wrap">
+  <div class="progress-track"><div class="progress-fill" id="prog-fill" style="width:0%"></div></div>
+  <div class="progress-label" id="prog-label"></div>
+</div>
+
+<!-- S0: Template choice -->
+<div id="s0" class="screen active"><div class="inner">
+  <h2>Choose a template</h2>
+  <p class="sub">Start with our standard phases or build your own.</p>
+  <div class="choice-grid">
+    <div class="choice-card" id="card-standard"><div class="choice-icon">&#9776;</div><div class="choice-label">Standard</div><div class="choice-desc">Use the default set of survey phases.</div></div>
+    <div class="choice-card" id="card-custom"><div class="choice-icon">&#9998;</div><div class="choice-label">Custom</div><div class="choice-desc">Define your own phases manually or by pasting a timeline.</div></div>
+  </div>
+  <div style="margin-bottom:1.5rem;">
+    <div class="field-label">Project name <span style="font-weight:400;color:#999;">(optional)</span></div>
+    <input type="text" id="project-name" class="project-input" placeholder="e.g. Nike Q1 Brand Tracker">
+  </div>
+  <div class="btn-row" style="justify-content:flex-end;">
+    <span id="s0-hint" style="font-size:13px;color:#999;">Choose a template above</span>
+    <button class="btn primary" id="btn-s0-next">Continue →</button>
+  </div>
+</div></div>
+
+<!-- S0b: Custom method -->
+<div id="s0b" class="screen"><div class="inner">
+  <h2>How do you want to define phases?</h2>
+  <p class="sub">Choose how you'd like to set up your custom template.</p>
+  <div class="choice-grid">
+    <div class="choice-card" id="card-manual"><div class="choice-icon">&#9998;</div><div class="choice-label">Edit manually</div><div class="choice-desc">Add, rename, and reorder phases yourself.</div></div>
+    <div class="choice-card" id="card-paste"><div class="choice-icon">&#9113;</div><div class="choice-label">Paste timeline</div><div class="choice-desc">Paste an existing timeline and we'll extract the phases.</div></div>
+  </div>
+  <div class="btn-row nav">
+    <button class="btn ghost" id="btn-s0b-back">← Back</button>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span id="s0b-hint" style="font-size:13px;color:#999;">Choose a method above</span>
+      <button class="btn primary" id="btn-s0b-next">Continue →</button>
+    </div>
+  </div>
+</div></div>
+
+<!-- S0c: Manual editor -->
+<div id="s0c" class="screen"><div class="inner">
+  <h2>Edit your phases</h2>
+  <p class="sub">Add, rename, reorder, or lock phases. Set the default duration for each.</p>
+  <div class="phase-col-labels">
+    <span style="width:20px;"></span>
+    <span style="flex:1;">Phase name</span>
+    <span style="width:58px;text-align:center;">Days</span>
+    <span style="width:32px;text-align:center;">Lock</span>
+    <span style="width:28px;"></span>
+  </div>
+  <div class="phase-list" id="phase-list"></div>
+  <button class="btn small" id="btn-add-phase" style="margin-top:4px;">+ Add phase</button>
+  <div class="btn-row nav">
+    <button class="btn ghost" id="btn-s0c-back">← Back</button>
+    <button class="btn primary" id="btn-s0c-next">Continue →</button>
+  </div>
+</div></div>
+
+<!-- S0d: Paste -->
+<div id="s0d" class="screen"><div class="inner">
+  <h2>Paste your timeline</h2>
+  <p class="sub">Paste from a spreadsheet, doc, or email. Include phase names with dates or durations.</p>
+  <textarea class="paste-area" id="paste-area" placeholder="e.g.&#10;Confirm QUX: 4/3/26&#10;Fielding Start: 4/10/26&#10;Fielding End: 4/24/26&#10;Data Delivery: 4/29/26&#10;Scorecard Delivery: 5/1/26&#10;Final Report: 5/14/26"></textarea>
+  <button class="btn small" id="btn-parse">Extract phases</button>
+  <div class="error-msg" id="parse-error">Could not extract phases. Try adjusting the format.</div>
+  <div class="success-msg" id="parse-success"></div>
+  <div class="btn-row nav">
+    <button class="btn ghost" id="btn-s0d-back">← Back</button>
+    <button class="btn primary" id="btn-s0d-next">Continue →</button>
+  </div>
+</div></div>
+
+<!-- S1: Direction + date -->
+<div id="s1" class="screen"><div class="inner">
+  <h2>Build your timeline</h2>
+  <p class="sub">Choose a direction, then set your anchor date.</p>
+  <div class="dir-grid">
+    <div class="dir-card" id="fwd-card"><div class="dir-arrow">→</div><div class="dir-label">Forwards</div><div class="dir-desc">You have a launch date — build forward to final delivery.</div></div>
+    <div class="dir-card" id="bwd-card"><div class="dir-arrow">←</div><div class="dir-label">Backwards</div><div class="dir-desc">Client has a deadline — build backward from final delivery.</div></div>
+  </div>
+  <div style="margin-bottom:1.5rem;">
+    <div class="field-label" id="anchor-label">Anchor date</div>
+    <input type="date" id="anchor-date">
+  </div>
+  <div class="btn-row nav">
+    <button class="btn ghost" id="btn-s1-back">← Back</button>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span id="dir-hint" style="font-size:13px;color:#999;">Choose a direction above</span>
+      <button class="btn primary" id="btn-s1-next">Continue →</button>
+    </div>
+  </div>
+</div></div>
+
+<!-- S2: Sliders -->
+<div id="s2" class="screen"><div class="inner">
+  <h2>Phase durations</h2>
+  <p class="sub">Adjust how many business days each phase takes. Weekends and US federal holidays are excluded.</p>
+  <div class="sliders" id="sliders"></div>
+  <div class="buffer-row">
+    <span class="buffer-label">Buffer between phases</span>
+    <input type="range" min="0" max="10" step="1" value="0" id="sl-buffer" style="width:110px;flex-shrink:0;">
+    <span style="font-size:14px;font-weight:500;min-width:22px;text-align:right;" id="v-buffer">0</span>
+    <span style="font-size:12px;color:#999;">d</span>
+  </div>
+  <div class="past-warning" id="past-warning">
+    <strong style="font-weight:500;">Start date is in the past.</strong> Push out your delivery date or shorten one or more phase durations.
+  </div>
+  <div class="btn-row nav">
+    <button class="btn ghost" id="btn-s2-back">← Back</button>
+    <button class="btn primary" id="btn-s2-next">Generate timeline →</button>
+  </div>
+</div></div>
+
+<!-- S3: Output -->
+<div id="s3" class="screen"><div class="inner">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
+    <div>
+      <div style="font-size:18px;font-weight:500;" id="tl-title">Survey Timeline</div>
+      <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap;">
+        <span class="tl-badge" id="tl-dir-badge"></span>
+        <span class="tl-badge" id="tl-proj-badge" style="display:none;"></span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;padding-top:2px;">
+      <span class="toast" id="toast">Copied!</span>
+      <button class="btn" id="btn-copy" style="font-size:13px;padding:6px 12px;">Copy</button>
+    </div>
+  </div>
+  <label style="font-size:12px;color:#666;display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:4px;">
+    <input type="checkbox" id="toggle-dow" style="width:auto;margin:0;"> Show day of week
+  </label>
+  <div class="same-date-warn" id="same-date-warn">&#9888; Some milestones share the same date — consider adding buffer days or adjusting durations.</div>
+  <table class="tl-table">
+    <thead><tr><th>Milestone</th><th>Date</th></tr></thead>
+    <tbody id="tl-body"></tbody>
+  </table>
+  <div class="stat-grid">
+    <div class="stat"><div class="stat-label">Total duration</div><div class="stat-val" id="s-duration">—</div></div>
+    <div class="stat"><div class="stat-label">Business days</div><div class="stat-val" id="s-bizdays">—</div></div>
+  </div>
+  <div style="margin-top:8px;">
+    <button class="btn small ghost" id="btn-duplicate">Duplicate ↗</button>
+  </div>
+  <div class="btn-row nav" style="margin-top:1rem;">
+    <button class="btn ghost" id="btn-s3-adjust">← Adjust</button>
+    <button class="btn ghost" id="btn-s3-restart">Start over</button>
+  </div>
+</div></div>
+
+<script>
+(function() {
+  const DEFAULT_PHASES = [
+    { key:'finalize',  label:'Finalize questionnaire', def:5,  locked:false },
+    { key:'fielding',  label:'Fielding period',        def:10, locked:false },
+    { key:'data',      label:'Data delivery',          def:5,  locked:false },
+    { key:'scorecard', label:'Scorecard delivery',     def:3,  locked:false },
+    { key:'report',    label:'Final report delivery',  def:10, locked:false },
+  ];
+
+  const STEP_LABELS = { s0:'Step 1 — Choose template', s0b:'Step 2 — Custom method', s0c:'Step 2 — Edit phases', s0d:'Step 2 — Paste timeline', s1:'Step 3 — Direction & date', s2:'Step 4 — Phase durations', s3:'Timeline' };
+  const STEP_PCT = { s0:10, s0b:25, s0c:40, s0d:40, s1:55, s2:75, s3:100 };
+
+  let dir=null, templateMode=null, customMethod=null, activePhases=null;
+  let parsedPaste=null, showDayOfWeek=false, lastMs=[], dragSrc=null;
+
+  function setProgress(id) {
+    document.getElementById('prog-fill').style.width=(STEP_PCT[id]||10)+'%';
+    document.getElementById('prog-label').textContent=STEP_LABELS[id]||'';
+  }
+
+  function goTo(id, back) {
+    document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active','back-anim'); });
+    var t=document.getElementById(id); t.classList.add('active');
+    if (back) t.classList.add('back-anim');
+    setProgress(id);
+    window.scrollTo(0,0);
+  }
+
+  // S0
+  var s0next=document.getElementById('btn-s0-next');
+  s0next.disabled=true; s0next.style.opacity='0.35'; s0next.style.cursor='not-allowed';
+  function selectTemplate(t) {
+    templateMode=t;
+    document.getElementById('card-standard').classList.toggle('selected',t==='standard');
+    document.getElementById('card-custom').classList.toggle('selected',t==='custom');
+    s0next.disabled=false; s0next.style.opacity='1'; s0next.style.cursor='pointer';
+    document.getElementById('s0-hint').style.display='none';
+  }
+  document.getElementById('card-standard').addEventListener('click',function(){ selectTemplate('standard'); });
+  document.getElementById('card-custom').addEventListener('click',function(){ selectTemplate('custom'); });
+  s0next.addEventListener('click',function(){
+    if (!templateMode) return;
+    if (templateMode==='standard') {
+      activePhases=DEFAULT_PHASES.map(function(p){ return {key:p.key,label:p.label,def:p.def,locked:false}; });
+      goTo('s1');
+    } else { goTo('s0b'); }
+  });
+
+  // S0b
+  var s0bnext=document.getElementById('btn-s0b-next');
+  s0bnext.disabled=true; s0bnext.style.opacity='0.35'; s0bnext.style.cursor='not-allowed';
+  function selectMethod(m) {
+    customMethod=m;
+    document.getElementById('card-manual').classList.toggle('selected',m==='manual');
+    document.getElementById('card-paste').classList.toggle('selected',m==='paste');
+    s0bnext.disabled=false; s0bnext.style.opacity='1'; s0bnext.style.cursor='pointer';
+    document.getElementById('s0b-hint').style.display='none';
+  }
+  document.getElementById('card-manual').addEventListener('click',function(){ selectMethod('manual'); });
+  document.getElementById('card-paste').addEventListener('click',function(){ selectMethod('paste'); });
+  document.getElementById('btn-s0b-back').addEventListener('click',function(){ goTo('s0',true); });
+  s0bnext.addEventListener('click',function(){
+    if (!customMethod) return;
+    if (customMethod==='manual') { renderPhaseList(DEFAULT_PHASES.map(function(p){ return {label:p.label,def:p.def,locked:false}; })); goTo('s0c'); }
+    else goTo('s0d');
+  });
+
+  // S0c
+  function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+
+  function renderPhaseList(phases) {
+    var list=document.getElementById('phase-list'); list.innerHTML='';
+    phases.forEach(function(p,i){
+      var row=document.createElement('div');
+      row.className='phase-item'; row.draggable=true; row.dataset.idx=i;
+      row.innerHTML='<span class="drag-handle">&#9776;</span>'+
+        '<input type="text" value="'+escHtml(p.label)+'" placeholder="Phase name" class="phase-label-input">'+
+        '<input type="number" value="'+p.def+'" min="1" max="60" class="phase-days-input">'+
+        '<button class="lock-btn'+(p.locked?' locked':'')+'" title="Lock">&#128274;</button>'+
+        '<button class="remove-btn">&#215;</button>';
+      row.querySelector('.remove-btn').addEventListener('click',function(){ var it=getManualPhases(); it.splice(i,1); renderPhaseList(it); });
+      row.querySelector('.lock-btn').addEventListener('click',function(){ var it=getManualPhases(); it[i].locked=!it[i].locked; renderPhaseList(it); });
+      row.addEventListener('dragstart',function(e){ dragSrc=row; e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',i); setTimeout(function(){ row.style.opacity='0.4'; },0); });
+      row.addEventListener('dragend',function(){ row.style.opacity='1'; list.querySelectorAll('.phase-item').forEach(function(r){ r.style.borderTop=''; r.style.borderBottom=''; }); });
+      row.addEventListener('dragover',function(e){ e.preventDefault(); list.querySelectorAll('.phase-item').forEach(function(r){ r.style.borderTop=''; r.style.borderBottom=''; }); var b=row.getBoundingClientRect(); if(e.clientY-b.top<b.height/2) row.style.borderTop='2px solid #178AF0'; else row.style.borderBottom='2px solid #178AF0'; });
+      row.addEventListener('dragleave',function(){ row.style.borderTop=''; row.style.borderBottom=''; });
+      row.addEventListener('drop',function(e){ e.preventDefault(); e.stopPropagation(); if(!dragSrc||dragSrc===row) return; var it=getManualPhases(); var from=parseInt(dragSrc.dataset.idx),to=parseInt(row.dataset.idx); var b=row.getBoundingClientRect(); if(e.clientY-b.top>=b.height/2) to++; if(to>from) to--; var mv=it.splice(from,1)[0]; it.splice(to,0,mv); dragSrc=null; renderPhaseList(it); });
+      list.appendChild(row);
+    });
+  }
+
+  function getManualPhases(){
+    var it=[]; document.querySelectorAll('#phase-list .phase-item').forEach(function(row){ it.push({ label:row.querySelector('.phase-label-input').value, def:parseInt(row.querySelector('.phase-days-input').value)||5, locked:row.querySelector('.lock-btn').classList.contains('locked') }); }); return it;
+  }
+
+  document.getElementById('btn-add-phase').addEventListener('click',function(){ var it=getManualPhases(); it.push({label:'New phase',def:5,locked:false}); renderPhaseList(it); });
+  document.getElementById('btn-s0c-back').addEventListener('click',function(){ goTo('s0b',true); });
+  document.getElementById('btn-s0c-next').addEventListener('click',function(){
+    var it=getManualPhases().filter(function(p){ return p.label.trim(); });
+    if (!it.length){ alert('Add at least one phase.'); return; }
+    activePhases=it.map(function(p,i){ return {key:'p'+i,label:p.label.trim(),def:p.def,locked:p.locked}; });
+    document.getElementById('sliders').innerHTML=''; goTo('s1');
+  });
+
+  // S0d
+  document.getElementById('btn-s0d-back').addEventListener('click',function(){ goTo('s0b',true); });
+  document.getElementById('btn-s0d-next').addEventListener('click',function(){ if(!parsedPaste){ alert('Extract phases first.'); return; } activePhases=parsedPaste; document.getElementById('sliders').innerHTML=''; goTo('s1'); });
+  document.getElementById('btn-parse').addEventListener('click',function(){
+    var raw=document.getElementById('paste-area').value.trim();
+    var errEl=document.getElementById('parse-error'), sucEl=document.getElementById('parse-success');
+    errEl.style.display='none'; sucEl.style.display='none';
+    var lines=raw.split('\n').map(function(l){ return l.trim(); }).filter(Boolean);
+    var dp=/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/;
+    var hasDates=lines.some(function(l){ return dp.test(l); });
+    var parsed=[];
+    if (hasDates){
+      var entries=[];
+      lines.forEach(function(l){ var m=l.match(dp); if(!m) return; var label=l.replace(dp,'').replace(/[:\-,]/g,'').trim(); if(!label) return; var yr=parseInt(m[3]); if(yr<100) yr+=2000; entries.push({label:label,date:new Date(yr,parseInt(m[1])-1,parseInt(m[2]))}); });
+      if (entries.length<2){ errEl.style.display='block'; return; }
+      entries.forEach(function(e,i){ var bd=i===0?5:countBiz(entries[i-1].date,e.date); parsed.push({label:e.label,def:Math.max(1,bd),locked:false}); });
+    } else {
+      var np=/(\d+)\s*(?:days?|d\b)?/i;
+      lines.forEach(function(l){ var m=l.match(np); var label=l.replace(np,'').replace(/[:\-,]/g,'').trim(); if(!label) return; parsed.push({label:label,def:m?Math.max(1,parseInt(m[1])):5,locked:false}); });
+    }
+    if (!parsed.length){ errEl.style.display='block'; return; }
+    parsedPaste=parsed.map(function(p,i){ return {key:'p'+i,label:p.label,def:p.def,locked:p.locked}; });
+    sucEl.textContent=parsed.length+' phases extracted. Click Continue to proceed.'; sucEl.style.display='block';
+  });
+
+  // S1
+  var s1next=document.getElementById('btn-s1-next');
+  s1next.disabled=true; s1next.style.opacity='0.35'; s1next.style.cursor='not-allowed';
+  function setDir(d){ dir=d; document.getElementById('fwd-card').classList.toggle('selected',d==='forward'); document.getElementById('bwd-card').classList.toggle('selected',d==='backward'); document.getElementById('anchor-label').textContent=d==='forward'?'Fielding start date':'Report delivery date'; s1next.disabled=false; s1next.style.opacity='1'; s1next.style.cursor='pointer'; document.getElementById('dir-hint').style.display='none'; }
+  document.getElementById('fwd-card').addEventListener('click',function(){ setDir('forward'); });
+  document.getElementById('bwd-card').addEventListener('click',function(){ setDir('backward'); });
+  document.getElementById('btn-s1-back').addEventListener('click',function(){ if(templateMode==='standard') goTo('s0',true); else goTo(customMethod==='manual'?'s0c':'s0d',true); });
+  s1next.addEventListener('click',function(){
+    if (!dir) return;
+    if (!document.getElementById('anchor-date').value){ alert('Please pick a date.'); return; }
+    buildSliders(); if(dir==='backward') checkPastWarning(); goTo('s2');
+  });
+
+  // S2
+  function buildSliders(){
+    var cont=document.getElementById('sliders'); cont.innerHTML='';
+    activePhases.forEach(function(p){
+      cont.innerHTML+='<div class="slider-row"><span class="slider-name">'+escHtml(p.label)+(p.locked?'<span class="slider-locked-badge">Locked</span>':'')+'</span><input type="range" min="1" max="60" step="1" value="'+p.def+'" id="sl-'+p.key+'"'+(p.locked?' disabled':'')+"><span class=\"slider-val\" id=\"v-"+p.key+'">'+p.def+'</span><span class="slider-unit">d</span></div>';
+    });
+    activePhases.forEach(function(p){ var el=document.getElementById('sl-'+p.key); if(el&&!p.locked) el.addEventListener('input',function(){ document.getElementById('v-'+p.key).textContent=this.value; if(dir==='backward') checkPastWarning(); }); });
+    document.getElementById('sl-buffer').addEventListener('input',function(){ document.getElementById('v-buffer').textContent=this.value; if(dir==='backward') checkPastWarning(); });
+  }
+
+  function checkPastWarning(){
+    var av=document.getElementById('anchor-date').value; if(!av) return;
+    var anchor=new Date(av+'T12:00:00'), total=0, buf=parseInt(document.getElementById('sl-buffer').value)||0;
+    activePhases.forEach(function(p){ var el=document.getElementById('sl-'+p.key); if(el) total+=parseInt(el.value); });
+    total+=buf*(activePhases.length-1);
+    var start=addBiz(anchor,-total), today=new Date(); today.setHours(0,0,0,0);
+    document.getElementById('past-warning').style.display=start<today?'block':'none';
+  }
+
+  document.getElementById('btn-s2-back').addEventListener('click',function(){ goTo('s1',true); });
+  document.getElementById('btn-s2-next').addEventListener('click',generateTimeline);
+
+  // Biz day helpers
+  function getNthWeekday(y,m,n,wd){var d=new Date(y,m,1),c=0;while(true){if(d.getDay()===wd){c++;if(c===n)return d.getDate();}d.setDate(d.getDate()+1);}}
+  function getLastWeekday(y,m,wd){var d=new Date(y,m+1,0);while(d.getDay()!==wd)d.setDate(d.getDate()-1);return d.getDate();}
+  function holidays(y){var h={},f=function(m,d){return y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');};h[f(0,1)]=1;h[f(0,getNthWeekday(y,0,3,1))]=1;h[f(1,getNthWeekday(y,1,3,1))]=1;h[f(4,getLastWeekday(y,4,1))]=1;h[f(5,19)]=1;h[f(6,4)]=1;h[f(8,getNthWeekday(y,8,1,1))]=1;h[f(9,getNthWeekday(y,9,2,1))]=1;h[f(10,11)]=1;var tg=getNthWeekday(y,10,4,4);h[f(10,tg)]=1;h[f(10,tg+1)]=1;h[f(11,25)]=1;return h;}
+  function isHol(d){var k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');return !!holidays(d.getFullYear())[k];}
+  function addBiz(date,days){var d=new Date(date),added=0,sign=days<0?-1:1,abs=Math.abs(days);while(added<abs){d.setDate(d.getDate()+sign);var w=d.getDay();if(w!==0&&w!==6&&!isHol(d))added++;}return d;}
+  function countBiz(d1,d2){var d=new Date(d1),c=0;while(d<d2){d.setDate(d.getDate()+1);var w=d.getDay();if(w!==0&&w!==6&&!isHol(d))c++;}return c;}
+  function fmt(d){ if(showDayOfWeek){var days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'],months=['January','February','March','April','May','June','July','August','September','October','November','December'];return days[d.getDay()]+', '+months[d.getMonth()]+' '+d.getDate();} return (d.getMonth()+1)+'/'+d.getDate()+'/'+String(d.getFullYear()).slice(2); }
+  function quarter(d){ return 'Q'+Math.ceil((d.getMonth()+1)/3)+' '+d.getFullYear(); }
+  function isFielding(p){ return p.label.toLowerCase().indexOf('field')!==-1; }
+
+  function generateTimeline(){
+    var anchor=new Date(document.getElementById('anchor-date').value+'T12:00:00');
+    var phases=activePhases, buf=parseInt(document.getElementById('sl-buffer').value)||0, dur={};
+    phases.forEach(function(p){ dur[p.key]=parseInt(document.getElementById('sl-'+p.key).value); });
+    var ms=[];
+    if (dir==='forward'){
+      var c=new Date(anchor);
+      ms.push({label:phases[0].label,date:new Date(c),note:''});
+      for(var i=1;i<phases.length;i++){
+        var prev=phases[i-1]; c=addBiz(c,dur[prev.key]); if(buf>0) c=addBiz(c,buf);
+        if(isFielding(prev)) ms[ms.length-1].endDate=new Date(c);
+        ms.push({label:phases[i].label,date:new Date(c),note:''});
+      }
+    } else {
+      var c=new Date(anchor);
+      ms.unshift({label:phases[phases.length-1].label,date:new Date(c),note:''});
+      for(var i=phases.length-2;i>=0;i--){
+        var endC=new Date(c); c=addBiz(c,-dur[phases[i].key]); if(buf>0) c=addBiz(c,-buf);
+        if(isFielding(phases[i])) ms.unshift({label:phases[i].label,date:new Date(c),endDate:new Date(endC),note:''});
+        else ms.unshift({label:phases[i].label,date:new Date(c),note:''});
+      }
+    }
+    ms=ms.filter(function(m,i,arr){ return i===0||m.label!==arr[i-1].label; });
+    var projName=document.getElementById('project-name').value.trim();
+    var first=ms[0].date, last=ms[ms.length-1].date;
+    document.getElementById('tl-title').textContent=(projName?projName+' — ':'')+quarter(first)+' Survey Timeline';
+    document.getElementById('tl-dir-badge').textContent=dir==='forward'?'Forward build':'Backward build';
+    var pb=document.getElementById('tl-proj-badge');
+    if(projName){pb.textContent=projName;pb.style.display='';}else pb.style.display='none';
+    lastMs=ms; renderTimeline(ms);
+    var dates=ms.map(function(m){ return m.date.toDateString(); });
+    document.getElementById('same-date-warn').style.display=dates.some(function(d,i){ return dates.indexOf(d)!==i; })?'block':'none';
+    document.getElementById('s-duration').textContent=Math.round(Math.abs(last-first)/(7*24*3600*1000))+' weeks';
+    document.getElementById('s-bizdays').textContent=countBiz(first,last)+' days';
+    goTo('s3');
+  }
+
+  function renderTimeline(ms){
+    document.getElementById('tl-body').innerHTML=ms.map(function(m,i){
+      var dateStr=m.endDate?fmt(m.date)+' – '+fmt(m.endDate):fmt(m.date);
+      return '<tr><td><div>'+escHtml(m.label)+'</div><input class="note-input" placeholder="Add a note…" value="'+escHtml(m.note||'')+'" data-idx="'+i+'"></td><td class="date-col">'+dateStr+'</td></tr>';
+    }).join('');
+    document.querySelectorAll('.note-input').forEach(function(inp){ inp.addEventListener('input',function(){ lastMs[parseInt(this.dataset.idx)].note=this.value; }); });
+  }
+
+  document.getElementById('toggle-dow').addEventListener('change',function(){ showDayOfWeek=this.checked; renderTimeline(lastMs); });
+
+  // S3
+  document.getElementById('btn-s3-adjust').addEventListener('click',function(){ goTo('s2',true); });
+  document.getElementById('btn-s3-restart').addEventListener('click',function(){
+    dir=null; templateMode=null; customMethod=null; activePhases=null; parsedPaste=null; lastMs=[];
+    ['fwd-card','bwd-card','card-standard','card-custom'].forEach(function(id){ document.getElementById(id).classList.remove('selected'); });
+    document.getElementById('anchor-date').value=''; document.getElementById('sliders').innerHTML='';
+    document.getElementById('sl-buffer').value=0; document.getElementById('v-buffer').textContent='0';
+    document.getElementById('past-warning').style.display='none'; document.getElementById('same-date-warn').style.display='none';
+    document.getElementById('toggle-dow').checked=false; showDayOfWeek=false;
+    s0next.disabled=true; s0next.style.opacity='0.35'; s0next.style.cursor='not-allowed'; document.getElementById('s0-hint').style.display='';
+    s1next.disabled=true; s1next.style.opacity='0.35'; s1next.style.cursor='not-allowed'; document.getElementById('dir-hint').style.display='';
+    s0bnext.disabled=true; s0bnext.style.opacity='0.35'; s0bnext.style.cursor='not-allowed'; document.getElementById('s0b-hint').style.display='';
+    goTo('s0',true);
+  });
+
+  document.getElementById('btn-duplicate').addEventListener('click',function(){
+    if(!lastMs.length) return;
+    document.getElementById('anchor-date').value=''; dir=null;
+    document.getElementById('fwd-card').classList.remove('selected'); document.getElementById('bwd-card').classList.remove('selected');
+    s1next.disabled=true; s1next.style.opacity='0.35'; s1next.style.cursor='not-allowed'; document.getElementById('dir-hint').style.display='';
+    goTo('s1');
+  });
+
+  function showToast(){ var t=document.getElementById('toast');t.style.display='inline';setTimeout(function(){t.style.display='none';},2000); }
+
+  document.getElementById('btn-copy').addEventListener('click',function(){
+    var title=document.getElementById('tl-title').textContent;
+    var rows=document.querySelectorAll('#tl-body tr');
+    var container=document.createElement('div');
+    container.style.cssText='position:fixed;left:-9999px;top:0;';
+    var b=document.createElement('b'); b.textContent=title; b.style.cssText='font-family:sans-serif;font-size:14px;'; container.appendChild(b); container.appendChild(document.createElement('br')); container.appendChild(document.createElement('br'));
+    var table=document.createElement('table'); table.setAttribute('border','1'); table.setAttribute('cellpadding','8'); table.setAttribute('cellspacing','0'); table.style.cssText='border-collapse:collapse;font-family:sans-serif;font-size:14px;';
+    var thead=document.createElement('tr');
+    ['Milestone','Date'].forEach(function(h){ var th=document.createElement('th');th.textContent=h;th.style.cssText='text-align:left;padding:8px 16px 8px 10px;border:1px solid #999;background:#f2f2f2;';thead.appendChild(th); });
+    table.appendChild(thead);
+    rows.forEach(function(r,i){
+      var c=r.querySelectorAll('td'); var tr=document.createElement('tr'); tr.style.background=i%2===0?'#fff':'#f7f7f7';
+      [c[0].querySelector('div').textContent, c[1].textContent].forEach(function(val){
+        var td=document.createElement('td'); td.style.cssText='padding:8px 16px 8px 10px;border:1px solid #999;vertical-align:top;'; td.textContent=val; tr.appendChild(td);
+      });
+      if(lastMs[i]&&lastMs[i].note){ var ntd=tr.querySelectorAll('td')[0]; ntd.textContent+='\n'+lastMs[i].note; ntd.style.whiteSpace='pre'; }
+      table.appendChild(tr);
+    });
+    container.appendChild(table); document.body.appendChild(container);
+    var sel=window.getSelection(); sel.removeAllRanges(); var range=document.createRange(); range.selectNodeContents(container); sel.addRange(range); document.execCommand('copy'); sel.removeAllRanges(); document.body.removeChild(container);
+    showToast();
+  });
+
+  setProgress('s0');
+})();
+</script>
+</body>
+</html>
